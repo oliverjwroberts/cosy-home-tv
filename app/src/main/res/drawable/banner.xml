@@ -3,8 +3,8 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="320dp" android:height="180dp" android:viewportWidth="320" android:viewportHeight="180">
     <path android:pathData="M0,0h320v180h-320z" android:fillColor="#0B1230" />
-    <path android:pathData="M246,38m-9,0a9,9 0,1 1,18 0a9,9 0,1 1,-18 0" android:fillColor="#F1EAD8" />
-    <path android:pathData="M250,36m-8,0a8,8 0,1 1,16 0a8,8 0,1 1,-16 0" android:fillColor="#0B1230" />
+    <!-- The crescent: the moon's edge (r9 at 246,38), then the shadow's edge (r8 at 250,36). -->
+    <path android:pathData="M246.13,29A9,9 0,1 0,253.27,43.3A8,8 0,0 1,246.13,29Z" android:fillColor="#F1EAD8" />
     <path android:pathData="M0,120C40,107 70,110 107,117C143,123 173,107 213,108C250,110 283,120 320,115L320,180L0,180Z" android:fillColor="#161D36" />
     <path android:pathData="M0,137C43,127 87,132 127,137C167,142 207,127 250,128C283,130 303,133 320,132L320,180L0,180Z" android:fillColor="#0E1326" />
     <path android:pathData="M253,120h15v9h-15zM251,121l10,-7 10,7z" android:fillColor="#070A14" />
