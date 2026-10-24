@@ -181,10 +181,15 @@ public class SceneView extends View {
                 glowDisc(c, 820, 706, 80, 0xFFFFC27E, 0xFFFFB46B, 0.45f);
                 break;
             case NIGHT:
-                glowDisc(c, 1480, 230, 54, 0xFFF1EAD8, 0xFFF1EAD8, 0.16f);
-                // The crescent: cover most of the moon with the sky colour at that height.
-                paint.setColor(skyAt(216));
-                c.drawCircle(1502, 216, 48, paint);
+                glow(c, 1480, 230, 54, 0xFFF1EAD8, 0.16f);
+                // The crescent: the moon's disc less an offset shadow disc, so the unlit part
+                // never reaches past the moon's edge.
+                Path moon = new Path();
+                moon.addCircle(1480, 230, 54, Path.Direction.CW);
+                Path shadow = new Path();
+                shadow.addCircle(1502, 216, 48, Path.Direction.CW);
+                moon.op(shadow, Path.Op.DIFFERENCE);
+                fill(c, moon, 0xFFF1EAD8);
                 break;
         }
 
@@ -220,12 +225,17 @@ public class SceneView extends View {
     }
 
     private void glowDisc(Canvas c, float x, float y, float r, int disc, int glow, float glowAlpha) {
-        int a = Math.round(glowAlpha * 255) << 24;
-        paint.setShader(new RadialGradient(x, y, r * 2.6f, a | (glow & 0xFFFFFF), glow & 0xFFFFFF, Shader.TileMode.CLAMP));
-        c.drawCircle(x, y, r * 2.6f, paint);
-        paint.setShader(null);
+        glow(c, x, y, r, glow, glowAlpha);
         paint.setColor(disc);
         c.drawCircle(x, y, r, paint);
+    }
+
+    /** The soft halo around a disc of radius r, without the disc itself. */
+    private void glow(Canvas c, float x, float y, float r, int color, float alpha) {
+        int a = Math.round(alpha * 255) << 24;
+        paint.setShader(new RadialGradient(x, y, r * 2.6f, a | (color & 0xFFFFFF), color & 0xFFFFFF, Shader.TileMode.CLAMP));
+        c.drawCircle(x, y, r * 2.6f, paint);
+        paint.setShader(null);
     }
 
     private void tree(Canvas c, float x, float baseY, float w, float h) {
@@ -240,19 +250,6 @@ public class SceneView extends View {
     private void fill(Canvas c, Path p, int color) {
         paint.setColor(color);
         c.drawPath(p, paint);
-    }
-
-    /** The sky gradient's colour at a design-space height. */
-    private int skyAt(float y) {
-        float t = y / H;
-        return t < 0.6f ? lerp(pal.s1, pal.s2, t / 0.6f) : lerp(pal.s2, pal.s3, (t - 0.6f) / 0.4f);
-    }
-
-    private static int lerp(int a, int b, float t) {
-        return Color.rgb(
-                Math.round(Color.red(a) + (Color.red(b) - Color.red(a)) * t),
-                Math.round(Color.green(a) + (Color.green(b) - Color.green(a)) * t),
-                Math.round(Color.blue(a) + (Color.blue(b) - Color.blue(a)) * t));
     }
 
     // ---- each frame -------------------------------------------------------------------------------
