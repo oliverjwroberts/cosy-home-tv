@@ -55,22 +55,12 @@ final class Tile extends FrameLayout {
             banner.setScaleType(ImageView.ScaleType.CENTER_CROP);
             banner.setImageDrawable(app.banner);
             addView(banner, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+            if (app.banner instanceof Apps.LazyBanner) {
+                // A deferred banner that fails to decode falls back to the icon and the name, as on main.
+                ((Apps.LazyBanner) app.banner).setOnMissing(() -> post(this::showIconAndLabel));
+            }
         } else {
-            ImageView icon = new ImageView(ctx);
-            icon.setImageDrawable(app.icon);
-            LayoutParams ilp = new LayoutParams((int) (28 * d), (int) (28 * d), Gravity.CENTER);
-            ilp.bottomMargin = (int) (10 * d);
-            addView(icon, ilp);
-            TextView label = new TextView(ctx);
-            label.setText(app.label);
-            label.setTextColor(0xFFFFFFFF);
-            label.setTextSize(11f);
-            label.setSingleLine(true);
-            label.setGravity(Gravity.CENTER);
-            label.setTypeface(getResources().getFont(R.font.outfit));
-            LayoutParams llp = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
-            llp.bottomMargin = (int) (6 * d);
-            addView(label, llp);
+            showIconAndLabel();
         }
 
         setOnClickListener(v -> launch());
@@ -88,6 +78,27 @@ final class Tile extends FrameLayout {
                     .start();
             if (focused && onFocus != null) onFocus.accept(this);
         });
+    }
+
+    /** The tile for an app with no banner: the icon, and the name under it. */
+    private void showIconAndLabel() {
+        float d = getResources().getDisplayMetrics().density;
+        removeAllViews();
+        ImageView icon = new ImageView(getContext());
+        icon.setImageDrawable(app.icon);
+        LayoutParams ilp = new LayoutParams((int) (28 * d), (int) (28 * d), Gravity.CENTER);
+        ilp.bottomMargin = (int) (10 * d);
+        addView(icon, ilp);
+        TextView label = new TextView(getContext());
+        label.setText(app.label);
+        label.setTextColor(0xFFFFFFFF);
+        label.setTextSize(11f);
+        label.setSingleLine(true);
+        label.setGravity(Gravity.CENTER);
+        label.setTypeface(getResources().getFont(R.font.outfit));
+        LayoutParams llp = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
+        llp.bottomMargin = (int) (6 * d);
+        addView(label, llp);
     }
 
     void setOnTileFocused(Consumer<Tile> listener) {

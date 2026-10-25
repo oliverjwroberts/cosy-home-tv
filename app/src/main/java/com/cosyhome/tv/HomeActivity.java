@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ChangedPackages;
 import android.media.tv.TvContract;
 import android.media.tv.TvInputInfo;
 import android.media.tv.TvInputManager;
@@ -61,6 +62,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private float density;
 
     private boolean appsOpen;
+    /** The package sequence the tiles were built from, so an unchanged list can skip the rebuild. */
+    private int packageSequence;
     /** Survives the activity being recreated while an app is open; resets only with the process. */
     private static int lastDock = 0;
     private static int lastGrid = 0;
@@ -93,6 +96,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
             if (Intent.ACTION_PACKAGE_REMOVED.equals(intent.getAction())
                     && intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return;
             loadApps();
+            ChangedPackages cp = getPackageManager().getChangedPackages(packageSequence);
+            if (cp != null) packageSequence = cp.getSequenceNumber();
             restoreFocus();
         }
     };
@@ -176,7 +181,13 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         } else {
             registerReceiver(packageReceiver, filter);
         }
-        loadApps();
+        // Rebuilding every tile means decoding every banner again. Between two resumes the package
+        // list almost never changes, so ask PackageManager first and rebuild only when it says so.
+        ChangedPackages changed = getPackageManager().getChangedPackages(packageSequence);
+        if (changed == null || !changed.getPackageNames().isEmpty()) {
+            loadApps();
+            if (changed != null) packageSequence = changed.getSequenceNumber();
+        }
         buildInputs();
         minuteTick.run();
         if (located) handler.postDelayed(weatherTick, Weather.stale(this) ? 0 : Weather.REFRESH_MS);
@@ -292,7 +303,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     // ---- tiles ------------------------------------------------------------------------------------
 
     private void loadApps() {
-        List<Apps.App> apps = Apps.load(this, dockApps, pinnedApps, hiddenApps);
+        // The dock and the first grid row are on screen at once: their banners are decoded now, the rest on draw.
+        List<Apps.App> apps = Apps.load(this, dockApps, pinnedApps, hiddenApps, dockApps.size() + GRID_COLUMNS);
         dock.removeAllViews();
         grid.removeAllViews();
 
@@ -347,6 +359,22 @@ public class HomeActivity extends Activity implements SceneView.Listener {
             });
             grid.addView(t, lp);
         }
+
+        // The deferred banners are decoded once the tiles are up, off the main thread: the panel opens
+        // without decoding on its first frame, and the tiles are ready before anyone scrolls to them.
+        grid.post(() -> {
+            List<Apps.LazyBanner> pending = new ArrayList<>();
+            for (Apps.App a : apps) {
+                if (a.banner instanceof Apps.LazyBanner) pending.add((Apps.LazyBanner) a.banner);
+            }
+            if (pending.isEmpty()) return;
+            Thread t = new Thread(() -> {
+                for (Apps.LazyBanner b : pending) b.resolve();
+                grid.postInvalidate();
+            }, "cosy-banners");
+            t.setPriority(Thread.MIN_PRIORITY);
+            t.start();
+        });
     }
 
     private void focusDock(int index) {
