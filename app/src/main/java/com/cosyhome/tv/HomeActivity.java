@@ -64,6 +64,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private boolean appsOpen;
     /** The package sequence the tiles were built at, or -1 before the first build. */
     private int packageSequence = -1;
+    private boolean resumed;
     /** Survives the activity being recreated while an app is open; resets only with the process. */
     private static int lastDock = 0;
     private static int lastGrid = 0;
@@ -95,6 +96,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
             // Updates send REMOVED then ADDED; wait for the new APK instead of dropping the tile.
             if (Intent.ACTION_PACKAGE_REMOVED.equals(intent.getAction())
                     && intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return;
+            // Behind an app, leave it to onResume, which asks PackageManager what changed.
+            if (!resumed) return;
             loadApps();
             restoreFocus();
         }
@@ -154,6 +157,25 @@ public class HomeActivity extends Activity implements SceneView.Listener {
 
         weather.setText(weatherLine(Weather.cached(this)));
         readPhaseOverride(getIntent());
+
+        // Registered once rather than in onResume: there the call waits about 50 ms for the
+        // ActivityManager lock, which the system holds while it switches activities.
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_PACKAGE_ADDED);
+        filter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+        filter.addAction(Intent.ACTION_PACKAGE_CHANGED);
+        filter.addDataScheme("package");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(packageReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(packageReceiver, filter);
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        unregisterReceiver(packageReceiver);
     }
 
     private static void readPhaseOverride(Intent intent) {
@@ -169,16 +191,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     @Override
     protected void onResume() {
         super.onResume();
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(Intent.ACTION_PACKAGE_ADDED);
-        filter.addAction(Intent.ACTION_PACKAGE_REMOVED);
-        filter.addAction(Intent.ACTION_PACKAGE_CHANGED);
-        filter.addDataScheme("package");
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(packageReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            registerReceiver(packageReceiver, filter);
-        }
+        resumed = true;
         // Between two resumes the package list almost never changes, so keep the tiles unless
         // PackageManager reports a change. It returns null when nothing changed.
         if (packageSequence < 0 || getPackageManager().getChangedPackages(packageSequence) != null) {
@@ -194,7 +207,7 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     @Override
     protected void onPause() {
         super.onPause();
-        unregisterReceiver(packageReceiver);
+        resumed = false;
         handler.removeCallbacks(minuteTick);
         handler.removeCallbacks(weatherTick);
         scene.setRunning(false);
