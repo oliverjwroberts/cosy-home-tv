@@ -83,6 +83,7 @@ default. Find package names with `adb shell pm list packages`.
 |---|---|---|
 | `location.name` | empty | The town shown before the weather |
 | `location.latitude`, `location.longitude` | empty | Where sunrise, sunset and the weather are worked out for. Without them there is no weather line, and the scene changes at fixed times: dawn 06:20, day 07:50, dusk 18:10, night 19:40 |
+| `weather.temperature_unit` | `celsius` | The unit in the weather line: `celsius` or `fahrenheit`. Any other value means Celsius |
 | `dock` | Netflix, Prime Video, Disney+, YouTube, Plex, Spotify | The apps on the clock screen, in order. Six fit. Cosy Home skips apps that aren't installed |
 | `pinned` | empty | The apps next in the grid after the dock apps. The rest follow alphabetically |
 | `hidden` | Philips system apps | Apps never shown as tiles |
