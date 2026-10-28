@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Outline;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.provider.Settings;
 import android.view.Gravity;
@@ -56,11 +57,11 @@ final class Tile extends FrameLayout {
             banner.setImageDrawable(app.banner);
             addView(banner, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
             if (app.banner instanceof Apps.LazyBanner) {
-                // A deferred banner that fails to decode falls back to the icon and the name, as on main.
-                ((Apps.LazyBanner) app.banner).setOnMissing(() -> post(this::showIconAndLabel));
+                // A deferred banner that fails to decode falls back to the icon and the name.
+                ((Apps.LazyBanner) app.banner).setOnMissing(icon -> post(() -> showIconAndLabel(icon)));
             }
         } else {
-            showIconAndLabel();
+            showIconAndLabel(app.icon);
         }
 
         setOnClickListener(v -> launch());
@@ -81,14 +82,14 @@ final class Tile extends FrameLayout {
     }
 
     /** The tile for an app with no banner: the icon, and the name under it. */
-    private void showIconAndLabel() {
+    private void showIconAndLabel(Drawable icon) {
         float d = getResources().getDisplayMetrics().density;
         removeAllViews();
-        ImageView icon = new ImageView(getContext());
-        icon.setImageDrawable(app.icon);
+        ImageView iconView = new ImageView(getContext());
+        iconView.setImageDrawable(icon);
         LayoutParams ilp = new LayoutParams((int) (28 * d), (int) (28 * d), Gravity.CENTER);
         ilp.bottomMargin = (int) (10 * d);
-        addView(icon, ilp);
+        addView(iconView, ilp);
         TextView label = new TextView(getContext());
         label.setText(app.label);
         label.setTextColor(0xFFFFFFFF);

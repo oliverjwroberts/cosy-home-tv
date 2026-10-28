@@ -62,8 +62,8 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     private float density;
 
     private boolean appsOpen;
-    /** The package sequence the tiles were built from, so an unchanged list can skip the rebuild. */
-    private int packageSequence;
+    /** The package sequence the tiles were built at, or -1 before the first build. */
+    private int packageSequence = -1;
     /** Survives the activity being recreated while an app is open; resets only with the process. */
     private static int lastDock = 0;
     private static int lastGrid = 0;
@@ -96,8 +96,6 @@ public class HomeActivity extends Activity implements SceneView.Listener {
             if (Intent.ACTION_PACKAGE_REMOVED.equals(intent.getAction())
                     && intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return;
             loadApps();
-            ChangedPackages cp = getPackageManager().getChangedPackages(packageSequence);
-            if (cp != null) packageSequence = cp.getSequenceNumber();
             restoreFocus();
         }
     };
@@ -181,12 +179,10 @@ public class HomeActivity extends Activity implements SceneView.Listener {
         } else {
             registerReceiver(packageReceiver, filter);
         }
-        // Rebuilding every tile means decoding every banner again. Between two resumes the package
-        // list almost never changes, so ask PackageManager first and rebuild only when it says so.
-        ChangedPackages changed = getPackageManager().getChangedPackages(packageSequence);
-        if (changed == null || !changed.getPackageNames().isEmpty()) {
+        // Between two resumes the package list almost never changes, so keep the tiles unless
+        // PackageManager reports a change. It returns null when nothing changed.
+        if (packageSequence < 0 || getPackageManager().getChangedPackages(packageSequence) != null) {
             loadApps();
-            if (changed != null) packageSequence = changed.getSequenceNumber();
         }
         buildInputs();
         minuteTick.run();
@@ -303,7 +299,12 @@ public class HomeActivity extends Activity implements SceneView.Listener {
     // ---- tiles ------------------------------------------------------------------------------------
 
     private void loadApps() {
-        // The dock and the first grid row are on screen at once: their banners are decoded now, the rest on draw.
+        // Read before the query, so a package that changes during the build triggers another one.
+        ChangedPackages changed = getPackageManager().getChangedPackages(Math.max(packageSequence, 0));
+        if (changed != null) packageSequence = changed.getSequenceNumber();
+        else if (packageSequence < 0) packageSequence = 0;
+        // The dock and the first grid row are on screen at once: their banners are decoded now, the rest
+        // on a background thread once the tiles are up.
         List<Apps.App> apps = Apps.load(this, dockApps, pinnedApps, hiddenApps, dockApps.size() + GRID_COLUMNS);
         dock.removeAllViews();
         grid.removeAllViews();

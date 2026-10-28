@@ -16,9 +16,12 @@ import android.util.DisplayMetrics;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * The TV apps to show as tiles: every LEANBACK_LAUNCHER activity, one per package, dock apps
@@ -44,7 +47,7 @@ final class Apps {
     }
 
     /** Decoded artwork, kept across rebuilds: the package list rarely changes, the banners even less. */
-    private static final java.util.Map<String, Cached> CACHE = new java.util.HashMap<>();
+    private static final Map<String, Cached> CACHE = new HashMap<>();
 
     private static final class Cached {
         final long lastUpdateTime;
@@ -70,8 +73,8 @@ final class Apps {
 
     /**
      * @param eager how many banners to decode before returning: the dock and the first grid row, the
-     *              tiles a TV shows straight away. The others are decoded the first time they are
-     *              drawn, so start-up does not pay for banners nobody has scrolled to yet.
+     *              tiles a TV shows straight away. The others come back as {@link LazyBanner}s, so
+     *              start-up does not pay for banners nobody has scrolled to yet.
      */
     static List<App> load(Context ctx, List<String> dock, List<String> pinned, Set<String> hidden, int eager) {
         PackageManager pm = ctx.getPackageManager();
@@ -108,7 +111,7 @@ final class Apps {
                     // A declared banner can still fail to decode: keep the icon the tile would show.
                     if (banner == null) icon = c.ri.loadIcon(pm);
                 } else {
-                    banner = new LazyBanner(ctx, pm, c.ri, w, h);
+                    banner = new LazyBanner(ctx, c.ri, w, h);
                 }
             } else {
                 icon = c.ri.loadIcon(pm);
@@ -117,7 +120,7 @@ final class Apps {
             CACHE.put(c.pkg, new Cached(updated, banner, icon));
         }
         // Forget the apps that are gone, so a reinstall always decodes fresh artwork.
-        java.util.Set<String> current = new java.util.HashSet<>();
+        Set<String> current = new HashSet<>();
         for (App a : apps) current.add(a.pkg);
         CACHE.keySet().retainAll(current);
         return apps;
@@ -158,26 +161,39 @@ final class Apps {
         return id != 0;
     }
 
-    /** A banner decoded the first time it is drawn, so start-up only pays for the tiles on screen. */
+    /**
+     * A banner decoded after the tiles are up, on a background thread, or on its first draw if that
+     * comes sooner. It outlives the activity in {@link #CACHE}, so it only holds the application context.
+     */
     static final class LazyBanner extends Drawable {
         private final Context ctx;
         private final PackageManager pm;
         private final ResolveInfo ri;
         private final int w, h;
         private Drawable real;
-        private volatile Runnable onMissing;
+        /** The app's icon, once the banner has failed to decode. */
+        private Drawable fallback;
+        private Consumer<Drawable> onMissing;
 
-        LazyBanner(Context ctx, PackageManager pm, ResolveInfo ri, int w, int h) {
-            this.ctx = ctx;
-            this.pm = pm;
+        LazyBanner(Context ctx, ResolveInfo ri, int w, int h) {
+            this.ctx = ctx.getApplicationContext();
+            this.pm = this.ctx.getPackageManager();
             this.ri = ri;
             this.w = w;
             this.h = h;
         }
 
-        /** Called when the banner cannot be decoded at all: the tile then switches to the icon and name. */
-        void setOnMissing(Runnable r) {
-            onMissing = r;
+        /**
+         * Called with the app's icon when the banner cannot be decoded, so the tile can switch to the
+         * icon and name. Called straight away if the banner has already failed.
+         */
+        void setOnMissing(Consumer<Drawable> c) {
+            Drawable failed;
+            synchronized (this) {
+                onMissing = c;
+                failed = fallback;
+            }
+            if (failed != null) c.accept(failed);
         }
 
         /** Decodes now, so a later draw on the UI thread costs nothing. */
@@ -185,18 +201,19 @@ final class Apps {
             real();
         }
 
-        private synchronized Drawable real() {
-            if (real == null) {
+        private Drawable real() {
+            Drawable icon;
+            Consumer<Drawable> c;
+            synchronized (this) {
+                if (real != null || fallback != null) return real;
                 real = loadBanner(ctx, pm, ri);
-                if (real == null) {
-                    // Same fallback as an eager tile: a banner that fails to decode shows the icon and
-                    // the name, so tell the tile, which was built in banner mode.
-                    real = ri.loadIcon(pm);
-                    Runnable r = onMissing;
-                    if (r != null) r.run();
-                }
+                if (real != null) return real;
+                // Same fallback as an eager tile: the icon and the name.
+                icon = fallback = ri.loadIcon(pm);
+                c = onMissing;
             }
-            return real;
+            if (c != null) c.accept(icon);
+            return null;
         }
 
         @Override
