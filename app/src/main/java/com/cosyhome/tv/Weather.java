@@ -61,7 +61,7 @@ final class Weather {
                 if (conn.getResponseCode() != 200) return;
                 JSONObject current = new JSONObject(read(conn.getInputStream())).getJSONObject("current");
                 String text = Math.round(current.getDouble("temperature_2m"))
-                        + (fahrenheit ? "°F " : "° ")
+                        + (fahrenheit ? "°F " : "°C ")
                         + describe(current.getInt("weather_code"));
                 SharedPreferences.Editor e = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit();
                 e.putString("text", text).putString("unit", fahrenheit ? "fahrenheit" : "celsius")
